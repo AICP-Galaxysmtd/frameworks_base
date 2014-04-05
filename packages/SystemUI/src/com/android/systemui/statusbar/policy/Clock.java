@@ -16,6 +16,8 @@
 
 package com.android.systemui.statusbar.policy;
 
+import android.app.ActivityManagerNative;
+import android.app.StatusBarManager;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -26,6 +28,8 @@ import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.UserHandle;
+import android.provider.AlarmClock;
 import android.provider.Settings;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
@@ -34,6 +38,8 @@ import android.text.style.CharacterStyle;
 import android.text.style.RelativeSizeSpan;
 import android.util.AttributeSet;
 import android.view.View;
+import android.view.View.OnClickListener;
+import android.view.View.OnLongClickListener;
 import android.widget.TextView;
 
 import com.android.systemui.DemoMode;
@@ -42,6 +48,7 @@ import com.android.systemui.R;
 
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
+import java.util.Date;
 import java.util.Locale;
 import java.util.TimeZone;
 
@@ -50,7 +57,7 @@ import libcore.icu.LocaleData;
 /**
  * Digital clock for the status bar.
  */
-public class Clock extends TextView implements DemoMode {
+public class Clock extends TextView implements DemoMode, OnClickListener, OnLongClickListener {
     private boolean mAttached;
     private Calendar mCalendar;
     private String mClockFormatString;
@@ -69,6 +76,17 @@ public class Clock extends TextView implements DemoMode {
 
     protected int mWeekdayStyle = WEEKDAY_STYLE_GONE;
 
+    public static final int CLOCK_DATE_DISPLAY_GONE = 0;
+    public static final int CLOCK_DATE_DISPLAY_SMALL = 1;
+    public static final int CLOCK_DATE_DISPLAY_NORMAL = 2;
+
+    public static final int CLOCK_DATE_STYLE_REGULAR = 0;
+    public static final int CLOCK_DATE_STYLE_LOWERCASE = 1;
+    public static final int CLOCK_DATE_STYLE_UPPERCASE = 2;
+
+    protected int mClockDateDisplay = CLOCK_DATE_DISPLAY_GONE;
+    protected int mClockDateStyle = CLOCK_DATE_STYLE_UPPERCASE;
+
     public static final int STYLE_HIDE_CLOCK     = 0;
     public static final int STYLE_CLOCK_RIGHT    = 1;
     public static final int STYLE_CLOCK_CENTER   = 2;
@@ -81,6 +99,9 @@ public class Clock extends TextView implements DemoMode {
 
     protected int mClockStyle = STYLE_CLOCK_RIGHT;
     protected int mClockFontStyle = FONT_NORMAL;
+
+    private boolean mCustomColor;
+    private int systemColor;
 
     private ContentObserver mSettingsObserver = new ContentObserver(new Handler()) {
         @Override
@@ -107,6 +128,11 @@ public class Clock extends TextView implements DemoMode {
 
     public Clock(Context context, AttributeSet attrs, int defStyle) {
         super(context, attrs, defStyle);
+
+        if (isClickable()) {
+            setOnClickListener(this);
+            setOnLongClickListener(this);
+        }
     }
 
     @Override
@@ -140,6 +166,21 @@ public class Clock extends TextView implements DemoMode {
             resolver.registerContentObserver(Settings.System
                     .getUriFor(Settings.System.STATUSBAR_CLOCK_FONT_STYLE),
                     false, mSettingsObserver);
+            resolver.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.CUSTOM_SYSTEM_ICON_COLOR),
+                    false, mSettingsObserver);
+            resolver.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.SYSTEM_ICON_COLOR),
+                    false, mSettingsObserver);
+            resolver.registerContentObserver(Settings.System
+                    .getUriFor(Settings.System.STATUSBAR_CLOCK_DATE_DISPLAY),
+                    false, mSettingsObserver);
+            resolver.registerContentObserver(Settings.System
+                    .getUriFor(Settings.System.STATUSBAR_CLOCK_DATE_STYLE),
+                    false, mSettingsObserver);
+            resolver.registerContentObserver(Settings.System
+                    .getUriFor(Settings.System.STATUSBAR_CLOCK_DATE_FORMAT),
+                    false, mSettingsObserver);
         }
 
         // NOTE: It's safe to do these after registering the receiver since the receiver always runs
@@ -155,9 +196,9 @@ public class Clock extends TextView implements DemoMode {
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         if (mAttached) {
-            mAttached = false;
             getContext().unregisterReceiver(mIntentReceiver);
             getContext().getContentResolver().unregisterContentObserver(mSettingsObserver);
+            mAttached = false;
         }
     }
 
@@ -206,11 +247,34 @@ public class Clock extends TextView implements DemoMode {
         }
 
         String todayIs = null;
+        CharSequence dateString = null;
         String result = sdf.format(mCalendar.getTime());
 
         if (mWeekdayStyle != WEEKDAY_STYLE_GONE) {
             todayIs = (new SimpleDateFormat("E")).format(mCalendar.getTime()) + " ";
             result = todayIs + result;
+        }
+
+        if (mClockDateDisplay != CLOCK_DATE_DISPLAY_GONE) {
+            Date now = new Date();
+
+            String clockDateFormat = Settings.System.getString(getContext().getContentResolver(),
+                    Settings.System.STATUSBAR_CLOCK_DATE_FORMAT);
+
+            if (clockDateFormat == null || clockDateFormat.isEmpty()) {
+                // Set dateString to short uppercase Weekday (Default for AOKP) if empty
+                dateString = DateFormat.format("EEE", now) + " ";
+            } else {
+                dateString = DateFormat.format(clockDateFormat, now) + " ";
+            }
+            if (mClockDateStyle == CLOCK_DATE_STYLE_LOWERCASE) {
+                // When Date style is small, convert date to uppercase
+                result = dateString.toString().toLowerCase() + result;
+            } else if (mClockDateStyle == CLOCK_DATE_STYLE_UPPERCASE) {
+                result = dateString.toString().toUpperCase() + result;
+            } else {
+                result = dateString.toString() + result;
+            }
         }
 
         SpannableStringBuilder formatted = new SpannableStringBuilder(result);
@@ -251,6 +315,20 @@ public class Clock extends TextView implements DemoMode {
                 }
             }
         }
+        if (mClockDateDisplay != CLOCK_DATE_DISPLAY_NORMAL) {
+            if (dateString != null) {
+                int dateStringLen = dateString.length();
+                if (mClockDateDisplay == CLOCK_DATE_DISPLAY_GONE) {
+                    formatted.delete(0, dateStringLen);
+                } else {
+                    if (mClockDateDisplay == CLOCK_DATE_DISPLAY_SMALL) {
+                        CharacterStyle style = new RelativeSizeSpan(0.7f);
+                        formatted.setSpan(style, 0, dateStringLen,
+                                          Spannable.SPAN_EXCLUSIVE_INCLUSIVE);
+                    }
+            }
+         }
+        }
         return formatted;
     }
 
@@ -272,10 +350,32 @@ public class Clock extends TextView implements DemoMode {
         }
         mClockFontStyle = Settings.System.getInt(resolver,
                 Settings.System.STATUSBAR_CLOCK_FONT_STYLE, FONT_NORMAL);
+
+        mCustomColor = Settings.System.getIntForUser(resolver,
+                Settings.System.CUSTOM_SYSTEM_ICON_COLOR, 0,
+                UserHandle.USER_CURRENT) == 1;
+
+        int systemColor = Settings.System.getIntForUser(resolver,
+                Settings.System.SYSTEM_ICON_COLOR, defaultColor,
+                UserHandle.USER_CURRENT);
+
+        mClockDateDisplay = Settings.System.getIntForUser(resolver,
+                Settings.System.STATUSBAR_CLOCK_DATE_DISPLAY, CLOCK_DATE_DISPLAY_GONE,
+                UserHandle.USER_CURRENT);
+        mClockDateStyle = Settings.System.getIntForUser(resolver,
+                Settings.System.STATUSBAR_CLOCK_DATE_STYLE, CLOCK_DATE_STYLE_UPPERCASE,
+                UserHandle.USER_CURRENT);
+
+        if (mAttached) {
+            if (mCustomColor) {
+                setTextColor(systemColor);
+            } else {
+                setTextColor(mClockColor);
+            }
+        }
     }
 
     protected void updateView() {
-        setTextColor(mClockColor);
         getFontStyle(mClockFontStyle);
         updateClockVisibility();
         updateClock();
@@ -308,6 +408,45 @@ public class Clock extends TextView implements DemoMode {
                 break;
         }
      }
+
+    private void collapseStartActivity(Intent what) {
+        // don't do anything if the activity can't be resolved (e.g. app disabled)
+        if (getContext().getPackageManager().resolveActivity(what, 0) == null) {
+            return;
+        }
+
+        // collapse status bar
+        StatusBarManager statusBarManager = (StatusBarManager) getContext().getSystemService(
+                Context.STATUS_BAR_SERVICE);
+        statusBarManager.collapsePanels();
+
+        // dismiss keyguard in case it was active and no passcode set
+        try {
+            ActivityManagerNative.getDefault().dismissKeyguardOnNextActivity();
+        } catch (Exception ex) {
+            // no action needed here
+        }
+
+        // start activity
+        what.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        mContext.startActivity(what);
+    }
+
+    @Override
+    public void onClick(View v) {
+        Intent intent = new Intent(AlarmClock.ACTION_SHOW_ALARMS);
+        collapseStartActivity(intent);
+    }
+
+    @Override
+    public boolean onLongClick(View v) {
+        Intent intent = new Intent("android.settings.DATE_SETTINGS");
+        intent.addCategory(Intent.CATEGORY_DEFAULT);
+        collapseStartActivity(intent);
+
+        // consume event
+        return true;
+    }
 
     private boolean mDemoMode;
 

@@ -56,7 +56,7 @@ import android.graphics.Canvas;
 import android.graphics.ColorFilter;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
-import android.graphics.PorterDuff;
+import android.graphics.PorterDuff.Mode;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.BitmapDrawable;
@@ -75,6 +75,7 @@ import android.text.Editable;
 import android.text.TextWatcher;
 import android.os.UserHandle;
 import android.provider.Settings;
+import android.provider.AlarmClock;
 import android.service.notification.StatusBarNotification;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -303,6 +304,7 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
 
     // the date view
     DateView mDateView;
+    View mClockView;
 
     // for heads up notifications
     private HeadsUpNotificationView mHeadsUpNotificationView;
@@ -311,6 +313,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
     // on-screen navigation buttons
     private NavigationBarView mNavigationBarView = null;
     private int mNavigationBarWindowState = WINDOW_STATE_SHOWING;
+
+    // member to store notification alpha
+    private int mAlpha = 255;
 
     // the tracker view
     int mTrackingPosition; // the position of the top of the tracking view.
@@ -348,6 +353,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
 
     private BatteryMeterView mBattery;
     private BatteryCircleMeterView mCircleBattery;
+
+    private boolean mCustomColor;
+    private int systemColor;
 
     // XXX: gesture research
     private final GestureRecorder mGestureRec = DEBUG_GESTURES
@@ -623,15 +631,21 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         mClearButton.setVisibility(View.GONE);
         mClearButton.setEnabled(false);
         mDateView = (DateView)mStatusBarWindow.findViewById(R.id.date);
+        if (mDateView != null) {
+            mDateView.setOnClickListener(mCalendarClickListener);
+            mDateView.setEnabled(true);
+        }
+        mClockView = mNotificationPanelHeader.findViewById(R.id.clock);
+        if (mClockView != null) {
+            mClockView.setOnClickListener(mClockClickListener);
+            mClockView.setOnLongClickListener(mClockLongClickListener);
+            mClockView.setEnabled(true);
+        }
 
         mHasSettingsPanel = res.getBoolean(R.bool.config_hasSettingsPanel);
         mHasFlipSettings = res.getBoolean(R.bool.config_hasFlipSettingsPanel);
 
         mDateTimeView = mNotificationPanelHeader.findViewById(R.id.datetime);
-        if (mDateTimeView != null) {
-            mDateTimeView.setOnLongClickListener(mClockClickListener);
-            mDateTimeView.setEnabled(true);
-        }
 
         mSettingsButton = (ImageView) mStatusBarWindow.findViewById(R.id.settings_button);
         if (mSettingsButton != null) {
@@ -1215,6 +1229,14 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
     public void addIcon(String slot, int index, int viewIndex, StatusBarIcon icon) {
         if (SPEW) Log.d(TAG, "addIcon slot=" + slot + " index=" + index + " viewIndex=" + viewIndex
                 + " icon=" + icon);
+
+        Drawable iconDrawable = StatusBarIconView.getIcon(mContext, icon);
+        if (mCustomColor) {
+            iconDrawable.setColorFilter(systemColor, Mode.SRC_ATOP);
+        } else {
+            iconDrawable.clearColorFilter();
+        }
+
         StatusBarIconView view = new StatusBarIconView(mContext, slot, null);
         view.set(icon);
         mStatusIcons.addView(view, viewIndex, new LinearLayout.LayoutParams(mIconSize, mIconSize));
@@ -1224,6 +1246,14 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
             StatusBarIcon old, StatusBarIcon icon) {
         if (SPEW) Log.d(TAG, "updateIcon slot=" + slot + " index=" + index + " viewIndex=" + viewIndex
                 + " old=" + old + " icon=" + icon);
+
+        Drawable iconDrawable = StatusBarIconView.getIcon(mContext, icon);
+        if (mCustomColor) {
+            iconDrawable.setColorFilter(systemColor, Mode.SRC_ATOP);
+        } else {
+            iconDrawable.clearColorFilter();
+        }
+
         StatusBarIconView view = (StatusBarIconView)mStatusIcons.getChildAt(viewIndex);
         view.set(icon);
     }
@@ -2562,20 +2592,13 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         }
 
         public void tickerHalting() {
-            if (mStatusBarContents.getVisibility() != View.VISIBLE) {
-                mStatusBarContents.setVisibility(View.VISIBLE);
-                mStatusBarContents
-                        .startAnimation(loadAnim(com.android.internal.R.anim.fade_in, null));
-            }
-            mTickerView.setVisibility(View.GONE);
-            mCenterClockLayout.setVisibility(View.VISIBLE);
-            mCenterClockLayout.startAnimation(loadAnim(com.android.internal.R.anim.fade_in, null));
             if (!mHaloActive) {
-                mStatusBarContents.setVisibility(View.VISIBLE);
-                mCenterClockLayout.setVisibility(View.VISIBLE);
+                if (mStatusBarContents.getVisibility() != View.VISIBLE) {
+                    mStatusBarContents.setVisibility(View.VISIBLE);
+                    mStatusBarContents
+                            .startAnimation(loadAnim(com.android.internal.R.anim.fade_in, null));
+                }
                 mTickerView.setVisibility(View.GONE);
-                mStatusBarContents.startAnimation(loadAnim(com.android.internal.R.anim.fade_in, null));
-                mCenterClockLayout.startAnimation(loadAnim(com.android.internal.R.anim.fade_in, null));
                 // we do not animate the ticker away at this point, just get rid of it (b/6992707)
             }
         }
@@ -2917,7 +2940,7 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         }
     };
 
-    private View.OnLongClickListener mClockClickListener = new View.OnLongClickListener() {
+    private View.OnLongClickListener mClockLongClickListener = new View.OnLongClickListener() {
         @Override
         public boolean onLongClick(View v) {
             startActivityDismissingKeyguard(
@@ -2925,6 +2948,20 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
             return true;
         }
     };
+
+    private View.OnClickListener mClockClickListener = new View.OnClickListener() {
+        public void onClick(View v) {
+            startActivityDismissingKeyguard(
+                    new Intent(AlarmClock.ACTION_SHOW_ALARMS), true); // have fun, everyone
+        }
+    };
+
+    private View.OnClickListener mCalendarClickListener = new View.OnClickListener() {
+        public void onClick(View v) {
+            Intent intent=Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_CALENDAR);
+            startActivityDismissingKeyguard(intent,true);
+        }
+     };
 
     private View.OnClickListener mNotificationButtonListener = new View.OnClickListener() {
         public void onClick(View v) {
@@ -3296,7 +3333,7 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
 
         @Override
         public void draw(Canvas canvas) {
-            canvas.drawColor(mColor, PorterDuff.Mode.SRC);
+            canvas.drawColor(mColor, Mode.SRC);
         }
 
         @Override
@@ -3477,6 +3514,14 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
                     Settings.System.STATUS_BAR_CUSTOM_HEADER),
                     false, this, UserHandle.USER_ALL);
 
+            resolver.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.CUSTOM_SYSTEM_ICON_COLOR),
+                    false, this, UserHandle.USER_ALL);
+
+            resolver.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.SYSTEM_ICON_COLOR),
+                    false, this, UserHandle.USER_ALL);
+
         }
 
         @Override
@@ -3505,6 +3550,9 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
                 }
             } else if (uri.equals(Settings.System.getUriFor(
                    Settings.System.NOTIFICATION_ALPHA))) {
+                mAlpha = (int)(255.0*(1.0 - Settings.System.getFloatForUser(
+                    mContext.getContentResolver(), Settings.System.NOTIFICATION_ALPHA,
+                    0.0f, UserHandle.USER_CURRENT)));
                 setNotificationAlpha();
             } else if (uri.equals(Settings.System.getUriFor(
                     Settings.System.ENABLE_ACTIVE_DISPLAY))) {
@@ -3576,6 +3624,12 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
             toggleCarrierAndWifiLabelVisibility();
         }
 
+        mCustomColor = Settings.System.getIntForUser(cr,
+                Settings.System.CUSTOM_SYSTEM_ICON_COLOR, 0, UserHandle.USER_CURRENT) == 1;
+        systemColor = Settings.System.getIntForUser(cr,
+                Settings.System.SYSTEM_ICON_COLOR, -2, UserHandle.USER_CURRENT);
+
+        updateBatteryIcons();
         updateCustomHeaderStatus();
 
     }
@@ -3821,29 +3875,36 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
         return true;
     }
 
+    private final Runnable setNotificationAlphaRunnable = new Runnable() {
+        public void run() {
+            if (mNotificationData == null) return;
+            try {
+                final int dataSize = mNotificationData.size();
+                for (int i = 0; i < dataSize; i++) {
+                    final Entry ent = mNotificationData.get(dataSize - i - 1);
+                    final View expanded = ent.expanded;
+                    if (expanded !=null && expanded.getBackground() != null) {
+                        expanded.getBackground().setAlpha(mAlpha);
+                    }
+                    final View expandedBig = ent.getBigContentView();
+                    if (expandedBig != null && expandedBig.getBackground() != null) {
+                        expandedBig.getBackground().setAlpha(mAlpha);
+                    }
+                    final StatusBarIconView icon = ent.icon;
+                    if (icon !=null && icon.getBackground() != null) {
+                        icon.getBackground().setAlpha(mAlpha);
+                    }
+                }
+            } catch (Exception ex) {
+                Log.e(TAG, "Exception occured while setting notification alpha: "+ex);
+            }
+        }
+    };
+
     private void setNotificationAlpha() {
         if (mPile == null || mNotificationData == null) {
             return;
         }
-        float notifAlpha = Settings.System.getFloatForUser(
-            mContext.getContentResolver(), Settings.System.NOTIFICATION_ALPHA,
-            0.0f, UserHandle.USER_CURRENT);
-        int alpha = (int) ((1 - notifAlpha) * 255);
-        int dataSize = mNotificationData.size();
-        for (int i = 0; i < dataSize; i++) {
-            Entry ent = mNotificationData.get(dataSize - i - 1);
-            View expanded = ent.expanded;
-            if (expanded !=null && expanded.getBackground() != null) {
-                expanded.getBackground().setAlpha(alpha);
-            }
-            View expandedBig = ent.getBigContentView();
-            if (expandedBig != null && expandedBig.getBackground() != null) {
-                expandedBig.getBackground().setAlpha(alpha);
-            }
-            StatusBarIconView icon = ent.icon;
-            if (icon !=null && icon.getBackground() != null) {
-                icon.getBackground().setAlpha(alpha);
-            }
-        }
+        mHandler.post(setNotificationAlphaRunnable);
     }
 }

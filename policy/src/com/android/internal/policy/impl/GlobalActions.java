@@ -29,6 +29,7 @@ import android.app.AlertDialog;
 import android.app.Dialog;
 import android.app.Profile;
 import android.app.ProfileManager;
+import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.ContentResolver;
@@ -36,7 +37,9 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
 import android.content.pm.UserInfo;
+import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.ServiceConnection;
 import android.database.ContentObserver;
 import android.graphics.drawable.Drawable;
@@ -81,6 +84,7 @@ import android.widget.TextView;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+
 
 /**
  * Helper to show the global actions dialog.  Each item is an {@link Action} that
@@ -148,13 +152,14 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
 
         ThemeUtils.registerThemeChangeReceiver(context, mThemeChangeReceiver);
 
+        ConnectivityManager cm = (ConnectivityManager)
+                context.getSystemService(Context.CONNECTIVITY_SERVICE);
+        mHasTelephony = cm.isNetworkSupported(ConnectivityManager.TYPE_MOBILE);
+
         // get notified of phone state changes
         TelephonyManager telephonyManager =
                 (TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE);
         telephonyManager.listen(mPhoneStateListener, PhoneStateListener.LISTEN_SERVICE_STATE);
-        ConnectivityManager cm = (ConnectivityManager)
-                context.getSystemService(Context.CONNECTIVITY_SERVICE);
-        mHasTelephony = cm.isNetworkSupported(ConnectivityManager.TYPE_MOBILE);
         mContext.getContentResolver().registerContentObserver(
                 Settings.Global.getUriFor(Settings.Global.AIRPLANE_MODE_ON), true,
                 mAirplaneModeObserver);
@@ -327,6 +332,18 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
 
         mItems = new ArrayList<Action>();
 
+        int quickbootAvailable = 1;
+        final PackageManager pm = mContext.getPackageManager();
+        try {
+            pm.getPackageInfo("com.qapp.quickboot", PackageManager.GET_META_DATA);
+        } catch (NameNotFoundException e) {
+            quickbootAvailable = 0;
+        }
+
+        final boolean quickbootEnabled = Settings.Global.getInt(
+                mContext.getContentResolver(), Settings.Global.ENABLE_QUICKBOOT,
+                quickbootAvailable) == 1;
+
         // first: power off
         mItems.add(
             new SinglePressAction(
@@ -334,12 +351,19 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
                     R.string.global_action_power_off) {
 
                 public void onPress() {
+                    // goto quickboot mode
+                    if (quickbootEnabled) {
+                        startQuickBoot();
+                        return;
+                    }
+
                     // shutdown by making sure radio and power are handled accordingly.
                     mWindowManagerFuncs.shutdown(true);
                 }
 
                 public boolean onLongPress() {
-                    mWindowManagerFuncs.rebootSafeMode(true);
+                    // long press always does a full shutdown in case quickboot is enabled
+                    mWindowManagerFuncs.shutdown(true);
                     return true;
                 }
 
@@ -1431,6 +1455,16 @@ class GlobalActions implements DialogInterface.OnDismissListener, DialogInterfac
                 mContext.getContentResolver(),
                 Settings.System.EXPANDED_DESKTOP_STATE,
                 on ? 1 : 0, UserHandle.USER_CURRENT);
+    }
+
+    private void startQuickBoot() {
+
+        Intent intent = new Intent("org.codeaurora.action.QUICKBOOT");
+        intent.putExtra("mode", 0);
+        try {
+            mContext.startActivityAsUser(intent,UserHandle.CURRENT);
+        } catch (ActivityNotFoundException e) {
+        }
     }
 
     private static final class GlobalActionsDialog extends Dialog implements DialogInterface {

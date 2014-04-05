@@ -2526,6 +2526,12 @@ public final class Settings {
         public static final String BATTERY_LIGHT_FULL_COLOR = "battery_light_full_color";
 
         /**
+         * What color to use for the battery LED while charging - really full (100%)
+         * @hide
+         */
+        public static final String BATTERY_LIGHT_REALLY_FULL_COLOR = "battery_light_really_full_color";
+
+        /**
          * Show pointer location on screen?
          * 0 = no
          * 1 = yes
@@ -2725,6 +2731,13 @@ public final class Settings {
          * @hide
          */
         public static final String ACTIVE_NOTIFICATIONS_PRIVACY_MODE = "active_notifications_privacy_mode";
+
+        /**
+         * Whether to hide the frame behind lockscreen widgets
+         * @hide
+         */
+        public static final String LOCKSCREEN_WIDGET_FRAME_ENABLED =
+                "lockscreen_widget_frame_enabled";
 
         /**
          * Whether double-tap and hold on the lock glowpad starts the torch
@@ -3053,6 +3066,30 @@ public final class Settings {
          * @hide
          */
         public static final String STATUS_BAR_BATTERY_COLOR = "status_bar_battery_color";
+
+         /**
+         * Action for long-pressing back button on lock screen
+         * @hide
+         */
+        public static final String LOCKSCREEN_LONG_BACK_ACTION = "lockscreen_long_back_action";
+
+        /**
+         * Action for long-pressing home button on lock screen
+         * @hide
+         */
+        public static final String LOCKSCREEN_LONG_HOME_ACTION = "lockscreen_long_home_action";
+
+        /**
+         * Action for long-pressing menu button on lock screen
+         * @hide
+         */
+        public static final String LOCKSCREEN_LONG_MENU_ACTION = "lockscreen_long_menu_action";
+
+        /**
+         * Whether to unlock the screen with the home key.  The value is boolean (1 or 0).
+         * @hide
+         */
+        public static final String HOME_UNLOCK_SCREEN = "home_unlock_screen";
 
         /**
          * Battery icon text color
@@ -3796,6 +3833,59 @@ public final class Settings {
          * @hide
          */
         public static final String CUSTOM_SOUND_EFFECTS_PATH = "custom_sound_effects_path";
+
+        /**
+         * Status bar color
+         * @hide
+         */
+        public static final String CUSTOM_STATUS_BAR_COLOR = "custom_status_bar_color";
+
+        /** @hide */
+        public static final String STATUS_BAR_OPAQUE_COLOR = "status_bar_opaque_color";
+        /** @hide */
+        public static final String STATUS_BAR_SEMI_TRANS_COLOR = "status_bar_semi_trans_color";
+
+        /**
+         * Status icon color
+         * @hide
+         */
+        public static final String CUSTOM_SYSTEM_ICON_COLOR = "custom_system_icon_color";
+
+        /** @hide */
+        public static final String SYSTEM_ICON_COLOR = "system_icon_color";
+
+       /**
+         * @hide
+         * Shows custom date before clock time
+         * 0 - No Date
+         * 1 - Small Date
+         * 2 - Normal Date
+         */
+        public static final String STATUSBAR_CLOCK_DATE_DISPLAY = "statusbar_clock_date_display";
+
+        /**
+         * @hide
+         * Sets the date string style
+         * 0 - Regular style
+         * 1 - Lowercase
+         * 2 - Uppercase
+         */
+        public static final String STATUSBAR_CLOCK_DATE_STYLE = "statusbar_clock_date_style";
+
+        /**
+         * @hide
+         * Stores the java DateFormat string for the date
+         */
+        public static final String STATUSBAR_CLOCK_DATE_FORMAT = "statusbar_clock_date_format";
+
+        /**
+         * MediaScanner behavior on boot.
+         * 0 = enabled
+         * 1 = ask (notification)
+         * 2 = disabled
+         * @hide
+         */
+         public static final String MEDIA_SCANNER_ON_BOOT = "media_scanner_on_boot";
 
         /**
          * Settings to backup. This is here so that it's in the same place as the settings
@@ -7473,6 +7563,13 @@ public final class Settings {
          * @hide
          */
         public static final String LOW_BATTERY_SOUND_TIMEOUT = "low_battery_sound_timeout";
+
+        /**
+         * Enable the QuickBoot feature
+         *
+         * @hide
+         */
+        public static final String ENABLE_QUICKBOOT = "enable_quickboot";
 
         /**
          * Settings to backup. This is here so that it's in the same place as the settings

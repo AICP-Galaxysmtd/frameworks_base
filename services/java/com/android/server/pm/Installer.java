@@ -396,7 +396,7 @@ public final class Installer {
         return execute(builder.toString());
     }
 
-    public int createUserData(String name, int uid, int userId) {
+    public int createUserData(String name, int uid, int userId, String seinfo) {
         StringBuilder builder = new StringBuilder("mkuserdata");
         builder.append(' ');
         builder.append(name);
@@ -404,6 +404,8 @@ public final class Installer {
         builder.append(uid);
         builder.append(' ');
         builder.append(userId);
+        builder.append(' ');
+        builder.append(seinfo != null ? seinfo : "!");
         return execute(builder.toString());
     }
 
@@ -502,7 +504,14 @@ public final class Installer {
         return execute(builder.toString());
     }
 
-    public boolean restoreconData() {
-        return (execute("restorecondata") == 0);
+    public boolean restoreconData(String pkgName, String seinfo, int uid) {
+        StringBuilder builder = new StringBuilder("restorecondata");
+        builder.append(' ');
+        builder.append(pkgName);
+        builder.append(' ');
+        builder.append(seinfo != null ? seinfo : "!");
+        builder.append(' ');
+        builder.append(uid);
+        return (execute(builder.toString()) == 0);
     }
 }
